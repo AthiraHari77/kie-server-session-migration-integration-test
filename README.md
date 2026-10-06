@@ -1,12 +1,6 @@
 # Stateful KIE Session Migration Integration Test (BAMOE 8.0 -> 8.1)
 
-Automated JUnit 5 integration test suite proving runtime stateful KIE session migration from **BAMOE 8.0 on EAP 7.4** to **BAMOE 8.1 on EAP 8.1**.
-
-## Dual-Execution Mode: Local EAP vs Docker
-
-The integration test automatically adapts to your environment:
-1. **Local EAP Mode (Default)**: Automatically detects local JBoss EAP installations at `../jboss-eap-7.4` and `../jboss-eap-8.1`, manages their lifecycle with port offsets, injects the snapshot extension, and executes the migration.
-2. **Docker Mode**: If Docker images are specified via `-Dbamoe.80.image=...` and `-Dbamoe.81.image=...`, Testcontainers orchestrates the containers with volume mounts.
+Automated JUnit 5 integration test suite proving runtime stateful KIE session migration from **BAMOE 8.0 on EAP 7.4** to **BAMOE 8.1 on EAP 8.1** using local EAP installations.
 
 ## Overview
 
@@ -49,9 +43,15 @@ kie-server-session-migration-integration-test/
             └── logback-test.xml
 ```
 
+## Prerequisites
+
+- Local JBoss EAP 7.4 installation (for BAMOE 8.0)
+- Local JBoss EAP 8.1 installation (for BAMOE 8.1)
+
+By default the test looks for EAP at `../../jboss-eap-7.4` and `../../jboss-eap-8.1` relative to the `migration-it` module directory.
+
 ## Running the Integration Test
 
-### Run with Local EAP Installations (Default)
 ```bash
 mvn clean verify
 ```
@@ -61,11 +61,4 @@ To specify custom paths to your local EAP instances:
 mvn clean verify \
   -Deap80.home=/path/to/jboss-eap-7.4 \
   -Deap81.home=/path/to/jboss-eap-8.1
-```
-
-### Run with Docker / Testcontainers
-```bash
-mvn clean verify \
-  -Dbamoe.80.image=your-registry/bamoe-80-eap:latest \
-  -Dbamoe.81.image=your-registry/bamoe-81-eap:latest
 ```
