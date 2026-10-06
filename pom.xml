@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.example</groupId>
+  <artifactId>kie-server-session-migration-it-parent</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <name>BAMOE Stateful KIE Session Migration IT (8.0 to 8.1)</name>
+
+  <modules>
+    <module>loan-kjar</module>
+    <module>session-snapshot-extension</module>
+    <module>migration-it</module>
+  </modules>
+
+  <properties>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- KIE versions -->
+    <kie.version.v80>7.67.2.Final-redhat-00034</kie.version.v80>
+    <kie.version.v81>7.81.1-SNAPSHOT</kie.version.v81>
+
+    <!-- Test runtime dependencies -->
+    <junit.version>5.10.2</junit.version>
+    <assertj.version>3.25.3</assertj.version>
+    <testcontainers.version>1.19.7</testcontainers.version>
+    <okhttp.version>4.12.0</okhttp.version>
+    <jackson.version>2.17.2</jackson.version>
+    <slf4j.version>1.7.36</slf4j.version>
+    <logback.version>1.2.13</logback.version>
+
+    <!-- Docker Images for EAP 7.4 (BAMOE 8.0) and EAP 8.1 (BAMOE 8.1) - Leave empty to use local EAP installs -->
+    <bamoe.80.image></bamoe.80.image>
+    <bamoe.81.image></bamoe.81.image>
+
+    <eap81.port.offset>100</eap81.port.offset>
+
+    <!-- Container / Session IDs for testing -->
+    <kie.container.id>loan-container</kie.container.id>
+    <kie.session.id>KBaseKS_stateful</kie.session.id>
+    <snapshot.dir>${project.build.directory}/snapshot-staging</snapshot.dir>
+
+    <!-- Server credentials -->
+    <kieserver.user>adminUser</kieserver.user>
+    <kieserver.password>admin@Redhat1</kieserver.password>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.assertj</groupId>
+        <artifactId>assertj-core</artifactId>
+        <version>${assertj.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers</artifactId>
+        <version>${testcontainers.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>${testcontainers.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>okhttp</artifactId>
+        <version>${okhttp.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>${logback.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.11.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.2.5</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>3.2.5</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+  <repositories>
+    <repository>
+      <id>bamoe8-ga</id>
+      <url>https://maven.repository.redhat.com/ga/</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
+    </repository>
+    <repository>
+      <id>kie-snapshots</id>
+      <url>https://repository.jboss.org/nexus/content/repositories/snapshots/</url>
+      <releases><enabled>false</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>bamoe8-ga</id>
+      <url>https://maven.repository.redhat.com/ga/</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
+    </pluginRepository>
+    <pluginRepository>
+      <id>kie-plugin-snapshots</id>
+      <url>https://repository.jboss.org/nexus/content/repositories/snapshots/</url>
+      <releases><enabled>false</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+</project>
