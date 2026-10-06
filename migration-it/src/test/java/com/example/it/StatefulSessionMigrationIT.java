@@ -1,6 +1,5 @@
 package com.example.it;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,12 +16,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.DockerClientFactory;
-import org.testcontainers.containers.BindMode;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.output.Slf4jLogConsumer;
-import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.utility.MountableFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,13 +24,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * Sequence of Events:
  * 1. Build and install loan-kjar & session-snapshot-extension
- * 2. Start BAMOE 8.0 server (local EAP 7.4 or Docker image) with extension injected and snapshot directory configured
+ * 2. Start BAMOE 8.0 server (local EAP 7.4) with extension injected and snapshot directory configured
  * 3. Deploy loan-kjar to 8.0
  * 4. Insert Applicants 1, 2, 3 into KBaseKS_stateful on 8.0 -> Assert 1 firing each and total 6 facts
  * 5. Take session snapshot on 8.0 -> Assert .ser file exists in host staging dir and size > 0
  * 6. Stop 8.0 server
  * 7. Transfer / verify .ser snapshot for 8.1
- * 8. Start BAMOE 8.1 server (local EAP 8.1 or Docker image) with extension injected and snapshot directory configured
+ * 8. Start BAMOE 8.1 server (local EAP 8.1) with extension injected and snapshot directory configured
  * 9. Wait for 8.1 readiness and verify snapshot auto-restored
  * 10. Insert Applicant 4 on 8.1 -> Assert EXACTLY 1 firing (proving 3 prior applicants were restored and not re-fired)
  */
@@ -62,13 +55,6 @@ public class StatefulSessionMigrationIT {
 
     private Path kjarJarPath;
     private Path extensionJarPath;
-
-    // Execution mode: Docker (Testcontainers) vs Local EAP
-    private boolean useDocker = false;
-
-    // Testcontainers
-    private GenericContainer<?> eap80DockerContainer;
-    private GenericContainer<?> eap81DockerContainer;
 
     // Local Server Harnesses
     private LocalServerHarness eap80LocalServer;
@@ -103,7 +89,7 @@ public class StatefulSessionMigrationIT {
         log.info("Host Snapshot 8.0 Dir: {}", snapshot80Dir);
         log.info("Host Snapshot 8.1 Dir: {}", snapshot81Dir);
 
-        // 3. Determine execution strategy: Local EAP vs Docker
+        // 3. Resolve local EAP installation paths.
         // user.dir points to the migration-it module directory when running from Maven.
         // EAP installations are at the workspace root (two levels up from migration-it).
         String userDir = System.getProperty("user.dir");
@@ -118,28 +104,17 @@ public class StatefulSessionMigrationIT {
         Path eap80Path = Paths.get(eap80HomeProp).toAbsolutePath().normalize();
         Path eap81Path = Paths.get(eap81HomeProp).toAbsolutePath().normalize();
 
-        String eap80Img = System.getProperty("bamoe.80.image", "");
-        String eap81Img = System.getProperty("bamoe.81.image", "");
-
-        if (!eap80Img.isBlank() && !eap81Img.isBlank() && isDockerAvailable()) {
-            useDocker = true;
-            log.info("Using Docker Testcontainers mode (8.0: {}, 8.1: {})", eap80Img, eap81Img);
-        } else if (Files.isDirectory(eap80Path) && Files.isDirectory(eap81Path)) {
-            useDocker = false;
-            log.info("Using Local EAP mode:\n  EAP 8.0: {}\n  EAP 8.1: {}", eap80Path, eap81Path);
-        } else {
-            throw new IllegalStateException("Neither valid local EAP installations nor Docker images were found.\n"
-                    + "Checked local EAP: " + eap80Path + " and " + eap81Path
-                    + "\nWorkspace root: " + workspaceRoot);
+        if (!Files.isDirectory(eap80Path) || !Files.isDirectory(eap81Path)) {
+            throw new IllegalStateException("Local EAP installations not found.\n"
+                    + "Checked EAP 8.0: " + eap80Path + "\n"
+                    + "Checked EAP 8.1: " + eap81Path + "\n"
+                    + "Workspace root: " + workspaceRoot);
         }
+
+        log.info("Using Local EAP mode:\n  EAP 8.0: {}\n  EAP 8.1: {}", eap80Path, eap81Path);
 
         // 4. Start BAMOE 8.0
-        if (useDocker) {
-            start80Docker(eap80Img);
-        } else {
-            start80Local(eap80Path);
-        }
-
+        start80Local(eap80Path);
         log.info("BAMOE 8.0 is UP at {}", client80.getBaseUrl());
 
         // 5. Deploy container on BAMOE 8.0
@@ -159,36 +134,6 @@ public class StatefulSessionMigrationIT {
         eap80LocalServer.start();
         eap80LocalServer.waitUntilReady(Duration.ofMinutes(4));
         client80 = eap80LocalServer.getClient();
-    }
-
-    private void start80Docker(String eap80Img) {
-        eap80DockerContainer = new GenericContainer<>(eap80Img)
-                .withExposedPorts(8080)
-                .withFileSystemBind(snapshot80Dir.toString(), "/opt/kie-snapshots", BindMode.READ_WRITE)
-                .withEnv("JAVA_OPTS", "-Dkie.session.snapshot.dir=/opt/kie-snapshots")
-                .waitingFor(Wait.forHttp("/kie-server/services/rest/server")
-                        .withBasicCredentials(KIE_USER, KIE_PASS)
-                        .forStatusCode(200)
-                        .withStartupTimeout(Duration.ofMinutes(4)))
-                .withLogConsumer(new Slf4jLogConsumer(log).withPrefix("EAP-8.0"));
-
-        if (Files.exists(extensionJarPath)) {
-            eap80DockerContainer.withCopyFileToContainer(
-                    MountableFile.forHostPath(extensionJarPath),
-                    "/opt/eap/standalone/deployments/ROOT.war/WEB-INF/lib/session-snapshot-extension-1.0.0.jar");
-        }
-
-        eap80DockerContainer.start();
-
-        if (Files.exists(kjarJarPath)) {
-            eap80DockerContainer.copyFileToContainer(
-                    MountableFile.forHostPath(kjarJarPath),
-                    "/opt/eap/repositories/kie/global/com/example/loan-kjar/1.0.0/loan-kjar-1.0.0.jar");
-        }
-
-        String url = String.format("http://%s:%d/kie-server/services/rest/server",
-                eap80DockerContainer.getHost(), eap80DockerContainer.getMappedPort(8080));
-        client80 = new KieServerClient(url, KIE_USER, KIE_PASS);
     }
 
     @Test
@@ -261,9 +206,7 @@ public class StatefulSessionMigrationIT {
 
         // 1. Stop 8.0 server
         log.info("Stopping BAMOE 8.0 server...");
-        if (useDocker && eap80DockerContainer != null) {
-            eap80DockerContainer.stop();
-        } else if (eap80LocalServer != null) {
+        if (eap80LocalServer != null) {
             eap80LocalServer.stopGracefully();
         }
 
@@ -274,13 +217,8 @@ public class StatefulSessionMigrationIT {
         log.info("Copied snapshot from {} to {}", snapshotFile80, snapshotFile81);
 
         // 3. Start BAMOE 8.1 server
-        if (useDocker) {
-            start81Docker(System.getProperty("bamoe.81.image"));
-        } else {
-            String eap81HomeProp = System.getProperty("eap81.home", System.getProperty("user.dir") + "/../jboss-eap-8.1");
-            start81Local(Paths.get(eap81HomeProp).toAbsolutePath().normalize());
-        }
-
+        String eap81HomeProp = System.getProperty("eap81.home", System.getProperty("user.dir") + "/../../jboss-eap-8.1");
+        start81Local(Paths.get(eap81HomeProp).toAbsolutePath().normalize());
         log.info("BAMOE 8.1 is UP at {}", client81.getBaseUrl());
 
         // 4. Deploy container on 8.1 (triggers auto-restore from snapshot)
@@ -325,44 +263,6 @@ public class StatefulSessionMigrationIT {
         client81 = eap81LocalServer.getClient();
     }
 
-    private void start81Docker(String eap81Img) {
-        eap81DockerContainer = new GenericContainer<>(eap81Img)
-                .withExposedPorts(8080)
-                .withFileSystemBind(snapshot81Dir.toString(), "/opt/kie-snapshots", BindMode.READ_WRITE)
-                .withEnv("JAVA_OPTS", "-Dkie.session.snapshot.dir=/opt/kie-snapshots")
-                .waitingFor(Wait.forHttp("/kie-server/services/rest/server")
-                        .withBasicCredentials(KIE_USER, KIE_PASS)
-                        .forStatusCode(200)
-                        .withStartupTimeout(Duration.ofMinutes(4)))
-                .withLogConsumer(new Slf4jLogConsumer(log).withPrefix("EAP-8.1"));
-
-        if (Files.exists(extensionJarPath)) {
-            eap81DockerContainer.withCopyFileToContainer(
-                    MountableFile.forHostPath(extensionJarPath),
-                    "/opt/eap/standalone/deployments/ROOT.war/WEB-INF/lib/session-snapshot-extension-1.0.0.jar");
-        }
-
-        eap81DockerContainer.start();
-
-        if (Files.exists(kjarJarPath)) {
-            eap81DockerContainer.copyFileToContainer(
-                    MountableFile.forHostPath(kjarJarPath),
-                    "/opt/eap/repositories/kie/global/com/example/loan-kjar/1.0.0/loan-kjar-1.0.0.jar");
-        }
-
-        String url = String.format("http://%s:%d/kie-server/services/rest/server",
-                eap81DockerContainer.getHost(), eap81DockerContainer.getMappedPort(8080));
-        client81 = new KieServerClient(url, KIE_USER, KIE_PASS);
-    }
-
-    private static boolean isDockerAvailable() {
-        try {
-            return DockerClientFactory.instance().isDockerAvailable();
-        } catch (Throwable t) {
-            return false;
-        }
-    }
-
     /** Deletes all .ser files in the given directory and creates it if absent. */
     private static void cleanDir(Path dir) throws IOException {
         Files.createDirectories(dir);
@@ -376,20 +276,11 @@ public class StatefulSessionMigrationIT {
     @AfterAll
     void cleanup() {
         log.info("Cleaning up integration test environment...");
-        if (useDocker) {
-            if (eap80DockerContainer != null) {
-                try { eap80DockerContainer.stop(); } catch (Exception ignored) {}
-            }
-            if (eap81DockerContainer != null) {
-                try { eap81DockerContainer.stop(); } catch (Exception ignored) {}
-            }
-        } else {
-            if (eap80LocalServer != null) {
-                try { eap80LocalServer.stopGracefully(); } catch (Exception ignored) {}
-            }
-            if (eap81LocalServer != null) {
-                try { eap81LocalServer.stopGracefully(); } catch (Exception ignored) {}
-            }
+        if (eap80LocalServer != null) {
+            try { eap80LocalServer.stopGracefully(); } catch (Exception ignored) {}
+        }
+        if (eap81LocalServer != null) {
+            try { eap81LocalServer.stopGracefully(); } catch (Exception ignored) {}
         }
         log.info("Stateful Session Migration Integration Test Complete.");
     }

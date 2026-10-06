@@ -28,16 +28,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.testcontainers</groupId>
-      <artifactId>testcontainers</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.testcontainers</groupId>
-      <artifactId>junit-jupiter</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
@@ -78,8 +68,6 @@
         </executions>
         <configuration>
           <systemPropertyVariables>
-            <bamoe.80.image>${bamoe.80.image}</bamoe.80.image>
-            <bamoe.81.image>${bamoe.81.image}</bamoe.81.image>
             <eap80.home>${project.basedir}/../../jboss-eap-7.4</eap80.home>
             <eap81.home>${project.basedir}/../../jboss-eap-8.1</eap81.home>
             <eap81.port.offset>${eap81.port.offset}</eap81.port.offset>
